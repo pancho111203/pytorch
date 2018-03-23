@@ -17,7 +17,7 @@ if sys.version_info[0] == 2:
     import Queue as queue
 else:
     import queue
-
+import inspect
 
 class ExceptionWrapper(object):
     r"""Wraps an exception plus traceback to communicate across threads"""
@@ -54,7 +54,12 @@ def _worker_loop(dataset, index_queue, data_queue, collate_fn, seed, init_fn, wo
             break
         idx, batch_indices = r
         try:
-            samples = collate_fn([dataset[i] for i in batch_indices])
+            collate_args_nr = len(inspect.signature(test).parameters)
+            if collate_args_nr == 1:
+                samples = collate_fn([dataset[i] for i in batch_indices])
+            elif collate_args_nr == 3:
+                samples = collate_fn([dataset[i] for i in batch_indices], batch_indices, dataset)
+
         except Exception:
             data_queue.put((idx, ExceptionWrapper(sys.exc_info())))
         else:
@@ -258,7 +263,12 @@ class _DataLoaderIter(object):
     def __next__(self):
         if self.num_workers == 0:  # same-process loading
             indices = next(self.sample_iter)  # may raise StopIteration
-            batch = self.collate_fn([self.dataset[i] for i in indices])
+            collate_args_nr = len(inspect.signature(test).parameters)
+            if collate_args_nr == 1:
+                batch = self.collate_fn([self.dataset[i] for i in indices])
+            elif collate_args_nr == 3:
+                batch = self.collate_fn([self.dataset[i] for i in indices], indices, self.dataset)
+
             if self.pin_memory:
                 batch = pin_memory_batch(batch)
             return batch
